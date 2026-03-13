@@ -55,7 +55,7 @@
             formData.append('photo', blob, 'shot.jpg');
 
             try {
-                await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
+                await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
                     method: 'POST',
                     body: formData
                 });
